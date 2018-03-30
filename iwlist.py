@@ -12,9 +12,27 @@ iwlist_regexps = [
     re.compile(r"^Signal level=(?P<signal_quality>\d+)/(?P<signal_total>\d+).*$"),
 ]
 
+iwconfig_regexps = [
+    re.compile(r"ESSID:\"(?P<essid>.*)\"$"),
+    re.compile(r"Access Point: (?P<mac>.+)$"),
+]
+
 # Runs the comnmand to scan the list of networks.
 # Must run as super user.
 def scan(interface='wlan0'):
+    # First check if we're connected to anything
+    cmd = ["iwconfig", interface]
+    lines = subprocess.check_output(cmd)
+    lines = lines.decode('utf-8').split('\n')
+    connection = {}
+    for line in lines:
+        line = line.strip()
+        for expression in iwconfig_regexps:
+            result = expression.search(line)
+            if result is not None:
+                connection.update(result.groupdict())
+                continue
+    # Now parse the wireless scan
     cmd = ["iwlist", interface, "scan"]
     lines = subprocess.check_output(cmd)
     lines = lines.decode('utf-8').split('\n')
@@ -24,6 +42,7 @@ def scan(interface='wlan0'):
         cellNumber = cellNumberRe.search(line)
         if cellNumber is not None:
             cells.append(cellNumber.groupdict())
+            cells[-1]['connected'] = cells[-1]['mac'] == connection.get('mac', None)
             continue
         for expression in iwlist_regexps:
             result = expression.search(line)
